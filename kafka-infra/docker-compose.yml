@@ -1,0 +1,71 @@
+services:
+  # ============================================================
+  # KAFKA BROKER (KRaft mode — không cần Zookeeper)
+  # ============================================================
+  kafka:
+    image: confluentinc/cp-kafka:7.7.0
+    container_name: pharmacy-kafka
+    hostname: kafka
+    ports:
+      - "9092:9092"       # Internal (cho các container khác)
+      - "29092:29092"     # External (cho máy host — Postman, Spring Boot)
+    environment:
+      # ===== KRaft config =====
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+
+      # ===== Cluster ID (bắt buộc cho KRaft) =====
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+
+      # ===== Default settings =====
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'      # Tắt tự động tạo topic
+      KAFKA_LOG_RETENTION_HOURS: 168                # Giữ log 7 ngày
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - pharmacy-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # ============================================================
+  # KAFKA UI (Web UI để xem Topic, Message, Consumer Group)
+  # ============================================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: pharmacy-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: pharmacy-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_READONLY: 'false'
+    networks:
+      - pharmacy-network
+
+# ============================================================
+# VOLUMES & NETWORKS
+# ============================================================
+volumes:
+  kafka-data:
+    driver: local
+
+networks:
+  pharmacy-network:
+    driver: bridge
